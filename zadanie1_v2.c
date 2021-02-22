@@ -8,7 +8,7 @@ void* memory_alloc(unsigned int size) {
 	int* p; //blok ktory budem alokovat
 	p = *p_fb;
 	int* prev = pam;
-	if (size < 4) size += 4; // o 4B musim pridat lebo inac by sa mi nezmestil pointer 
+	if (size < 4) size += sizeof(int *); // o 4B musim pridat lebo inac by sa mi nezmestil pointer 
 	unsigned int size_block = *p >> 1;
 	//uz nie je free blok
 	if (*p == NULL) return NULL;
@@ -39,7 +39,7 @@ void* memory_alloc(unsigned int size) {
 	int* next_fb = *(p + 1);
 	*p = (size << 1) + 1; //zakodujem velkost a ze je obsadene cize si velkost posuniem o 1 bit
 
-	int* new_fb = ((char*)p + (4 + size));
+	int* new_fb = ((char*)p + (sizeof(int) + size)); //namiesto +4 sizeof(int)
 	//printf("\nNew fb adress:%p", new_fb);
 	*new_fb = (new_size+4) << 1; //+4 lebo ukazovatel na novy fb sa pocita do velkosti bloku (iba hlavicka sa nepocita)
 	*(new_fb + 1) = next_fb;
@@ -68,7 +68,7 @@ int memory_free(void* val_ptr) {
 	}
 	printf("p:%p\n", p);
 	int size_block_ptr = (*((int*)head_val_ptr)) >> 1; //tu je chyba treba to posunut o 2 ale neviem preco
-	int* is_nextr = ((char*)head_val_ptr + (4 + size_block_ptr));
+	int* is_nextr = ((char*)head_val_ptr + (sizeof(int) + size_block_ptr)); //+4 sizeofint
 	//new verzia
 	if (*p == NULL) {
 		printf("\nP je null cize zapisem do next null");
@@ -93,7 +93,7 @@ int memory_free(void* val_ptr) {
 	if (prev_fb != pam) { //prev je niekde dalej ako prvy pointer na zaciatku pamate
 		printf("\nPrev nie je pam (prvy pointer na free blok na zaciatku pamate");
 		int size_prev = *prev_fb >> 1;
-		int* is_nextl = ((char*)prev_fb + (4 + size_prev));
+		int* is_nextl = ((char*)prev_fb + (sizeof(int) + size_prev)); //namiesto +4 sizeofint
 		if (is_nextl == head_val_ptr) { //prev je hned vedla a mozem ho spojit
 			printf("\nPrev je hned vedla cize spojim to cele a budem ukazovat na next_fb %p", (p));;
 			size_prev = size_prev + (*(int*)head_val_ptr >> 1) + sizeof(int*); //
@@ -120,14 +120,16 @@ void stav_pamate() {
 }
 int memory_check(void* ptr) {
 	int* point = (int *)pam+1;//aby som vyskocil z toho prveho ukazovatela
-	int s_add = (int* )ptr - 1;
-	while (point != NULL && point != s_add) {
-		int free = *point & 1;
-		if (point == s_add && free) return 1;
+	int *s_add = (int* )ptr - 1;
+	int free = *s_add & 1;
+	int* foot = pam;
+	while (point != NULL && point != s_add && point<s_add) {
+		if ((point) == s_add && free) return 1;
 		int size = *point >> 1;
-		point = ((char*)point + (4 + size));
+		point = ((char*)point + (sizeof(int) + size)); //+4/sizeofint
 	}
-	if (point == ptr) return 1;
+
+	if ((point) == s_add && free) return 1;
 	return 0;
 }
 void memory_init(void* ptr, unsigned int size) {
@@ -137,7 +139,7 @@ void memory_init(void* ptr, unsigned int size) {
 	*(int*)ptr = (int *)ptr+1;
 	*((int*)ptr+1) = (size - sizeof(int) - 2*sizeof(int*)) << 1;
 	*((int*)ptr + 2) = foot;
-	char* test = ((char*)ptr + 4 + real_size); //+8 lebo 4B ma integer ktory urcuje velkost bloku,po nom ide pointer na dalsi novy blok, ten je na zaciatku pointer na patu celeho bloku
+	char* test = ((char*)ptr + sizeof(int) + real_size); //+bloku,po nom ide pointer na dalsi novy blok, ten je na zaciatku pointer na patu celeho bloku
 	*foot = NULL;
 	printf("Koncim init: foot: %p next_free: %p prvy ukazovatel %p\n", foot, *((int*)ptr), ptr);
 }
@@ -163,7 +165,8 @@ int main()
 	int* p = pamat;
 	pam = pamat;
 
-	/* TEST1
+	 //TEST1
+	/*
 	memory_init(pamat, 100);
 	printf("%p\n", pamat);
 	printf("Po init  %d %p\n", pamat[96], &pamat[96]);
@@ -171,14 +174,17 @@ int main()
 	char* p1 = (char*)memory_alloc(8);
 	printf("\nsize:%d free:%d, %p", *((int*)p1-1) >> 1, *(int*)p1 & 1, p1);
 	char* p2 = (char*)memory_alloc(20);
+	printf("\nsize:%d free:%d, %p", *((int*)p2 - 1) >> 1, *(int*)p2 & 1, p2);
 	char* p3 = (char*)memory_alloc(150);
+	
 	printf("\np3:%p", p3);
 	memory_free(p1);
 	printf("\n%p\n", p2);
-	printf("%d", memory_check(p2));
+	printf("Memory check p2 before free:%d", memory_check(p2));
 	char* p4 = (char*)memory_alloc(52);
 	printf("\np4:%p", p4);
 	memory_free(p2);
+	printf("\nMemory check p2:%d\n", memory_check(p2));
 	memory_free(p4);
 	p1 = (char*)memory_alloc(8);
 	p2 = (char*)memory_alloc(24);
@@ -224,6 +230,7 @@ int main()
 	printf("free size:%d\n", *free_b >> 1);*/
 
 	//TEST 4
+	/*
 	memory_init(pamat, 5000);
 	char* p1 = (char*)memory_alloc(500);
 	printf("P1:%p\n", p1);
@@ -237,6 +244,35 @@ int main()
 	int* free_b = *(int*)pam;
 	printf("free size:%d\n", *free_b >> 1); 
 	printf("%d", sizeof(int*));
+	*/
+
+	//TEST 5
+	///*
+	memory_init(pamat, 5000);
+	char* p1 = (char*)memory_alloc(8);
+	printf("P1:%p\n", p1);
+	char* p2 = (char*)memory_alloc(24);
+	printf("P2:%p\n", p2);
+	char* p3 = (char*)memory_alloc(500);
+	printf("P3:%p\n", p3);
+	printf("Memory check p2:%d\n", memory_check(p2));
+	char* p4 = (char*)memory_alloc(31);
+	printf("P4:%p\n", p4);
+	char* p5 = (char*)memory_alloc(50);
+	printf("P5:%p\n", p5);
+	char* p6 = (char*)memory_alloc(100);
+	printf("P6:%p\n", p6);
+	char* p7 = (char*)memory_alloc(50000);
+	printf("P7:%p\n", p7);
+	char* p8 = (char*)memory_alloc(250);
+	printf("P8:%p\n", p8);
+	printf("free p4: %d\n", memory_free(p4));
+	printf("Memory check p4:%d\n", memory_check(p4));
+	printf("free p2: %d\n", memory_free(p2));
+	printf("free p3: %d\n", memory_free(p3));
+	int* free_b = *(int*)pam;
+	//*/
+
 	return 0;
 }
 
